@@ -60,7 +60,6 @@ static struct work_struct freq_scale_work;
 
 static cpumask_t work_cpumask;
 static unsigned int suspended;
-static unsigned int bounced_load;
 
 enum {
         SMARTASS_DEBUG_JUMPS=1,
@@ -242,11 +241,6 @@ static void cpufreq_smartass_timer(unsigned long data)
         if (debug_mask & SMARTASS_DEBUG_LOAD)
                 printk(KERN_INFO "smartassT @ %d: load %d (delta_time %llu)\n",policy->cur,cpu_load,delta_time);
 
-
-        if (bounced_load != 0 && suspended)
-                bounced_load = (bounced_load + cpu_load)/2;
-        else bounced_load = cpu_load;
-
         this_smartass->cur_cpu_load = cpu_load;
 
         // Scale up if load is above max or if there where no idle cycles since coming out of idle,
@@ -354,15 +348,13 @@ static void cpufreq_smartass_freq_change_time_work(struct work_struct *work)
                 else if (cpu_load < min_cpu_load) {
                         if (ramp_down_step)
                                 new_freq = policy->cur - ramp_down_step;
-                        else if (suspended && bounced_load < 10 && policy->cur < this_smartass->max_speed) {
-                                new_freq = policy->min; //sleep mode
-                        } else {
+                        else {
                                 cpu_load += 100 - max_cpu_load; // dummy load
                                 new_freq = policy->cur * cpu_load / 100;
                         }
                         relation = CPUFREQ_RELATION_L;
                         if (debug_mask & SMARTASS_DEBUG_JUMPS)
-                                printk(KERN_INFO "SmartassDown: suspend %d, new_freq %d, cpu_load %d, bounced_load %d\n",suspended,new_freq,cpu_load,bounced_load);
+                                printk(KERN_INFO "SmartassDown: suspend %d, new_freq %d, cpu_load %d\n",suspended,new_freq,cpu_load);
                 }
                 else new_freq = policy->cur;
 
@@ -751,7 +743,6 @@ static int __init cpufreq_smartass_init(void)
         min_cpu_load = DEFAULT_MIN_CPU_LOAD;
 
         suspended = 0;
-        bounced_load = 0;
 
         /* Initalize per-cpu data: */
         for_each_possible_cpu(i) {
