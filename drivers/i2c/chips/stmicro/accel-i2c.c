@@ -372,10 +372,10 @@ static char *accel_odr2name (int odr)
 int accel_i2c_set_config(int mode, int odr, int fs, int interval)
 {
 	mutex_lock (&accel_info.mlock);
-	if (accel_info.suspended) {
+	if (accel_info.suspended && mode != 0) {
 		mutex_unlock (&accel_info.mlock);
-		accel_resume (NULL);	
-		dprintk ("driver forced off suspend");
+                dprintk ("driver NOT setting config, we are suspended");
+                return 0;
 	} else {
 		mutex_unlock (&accel_info.mlock);
 	}

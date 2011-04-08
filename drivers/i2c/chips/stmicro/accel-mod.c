@@ -413,15 +413,9 @@ static int accel_remove(struct i2c_client *i2c)
 	return 0;
 }
 
-static union {
-	u8	array[13];
-	struct {
-	u8	ctrl_1, ctrl_2,
-		ctrl_3, ctrl_4, ctrl_5;
-	u8	int1_cfg, int1_src, int1_ths, int1_dur,
-		int2_cfg, int2_src, int2_ths, int2_dur;
-	}	registers;
-}	accel_safe;
+int oldodr;
+int oldmode;
+int oldgrange;
 
 /**
  * Suspend implementation
@@ -444,21 +438,12 @@ static int accel_suspend(struct i2c_client *client, pm_message_t mesg)
 //	up (&accel_info.sema2);
 
 	mutex_lock (&accel_info.mlock);
-	//accel_i2c_read_control_registers (accel_safe.array, 13);
-    accel_safe.registers.int1_cfg = accel_i2c_read_byte_data (ACCEL_I2C_PORT_INT1_CFG);
-    accel_safe.registers.int1_ths = accel_i2c_read_byte_data (ACCEL_I2C_PORT_INT1_THS);
-    accel_safe.registers.int1_dur = accel_i2c_read_byte_data (ACCEL_I2C_PORT_INT1_DUR);
-    accel_safe.registers.int2_cfg = accel_i2c_read_byte_data (ACCEL_I2C_PORT_INT2_CFG);
-    accel_safe.registers.int2_ths = accel_i2c_read_byte_data (ACCEL_I2C_PORT_INT2_THS);
-    accel_safe.registers.int2_dur = accel_i2c_read_byte_data (ACCEL_I2C_PORT_INT2_DUR);
-
-    accel_safe.registers.ctrl_4 = accel_i2c_read_byte_data (ACCEL_I2C_PORT_REG4);
-    accel_safe.registers.ctrl_3 = accel_i2c_read_byte_data (ACCEL_I2C_PORT_REG3);
-    accel_safe.registers.ctrl_1 = accel_i2c_read_byte_data (ACCEL_I2C_PORT_REG1);
-
-	i2c_smbus_write_byte_data (accel_info.i2c, ACCEL_I2C_PORT_REG1, 0x00); // power off
 	accel_info.suspended = 1;
 	mutex_unlock (&accel_info.mlock);
+        oldmode = atomic_read(&accel_info.mode);
+        oldodr = atomic_read(&accel_info.odr);
+        oldgrange = atomic_read(&accel_info.g_range);
+        accel_i2c_set_config(0,0,0,0);
 
 	dprintk ("driver suspended");
 	client=client;
@@ -479,21 +464,9 @@ int accel_resume(struct i2c_client *client)
 		mutex_unlock (&accel_info.mlock);	
 		dprintk ("driver has been resumed already");
 	} else {
-		accel_i2c_write_byte_data (ACCEL_I2C_PORT_INT1_CFG, accel_safe.registers.int1_cfg);
-		accel_i2c_write_byte_data (ACCEL_I2C_PORT_INT1_THS, accel_safe.registers.int1_ths);
-		accel_i2c_write_byte_data (ACCEL_I2C_PORT_INT1_DUR, accel_safe.registers.int1_dur);
-		accel_i2c_write_byte_data (ACCEL_I2C_PORT_INT2_CFG, accel_safe.registers.int2_cfg);
-		accel_i2c_write_byte_data (ACCEL_I2C_PORT_INT2_THS, accel_safe.registers.int2_ths);
-		accel_i2c_write_byte_data (ACCEL_I2C_PORT_INT2_DUR, accel_safe.registers.int2_dur);
-
-		accel_i2c_write_byte_data (ACCEL_I2C_PORT_REG5, 0);
-		accel_i2c_write_byte_data (ACCEL_I2C_PORT_REG4, accel_safe.registers.ctrl_4);
-		accel_i2c_write_byte_data (ACCEL_I2C_PORT_REG3, accel_safe.registers.ctrl_3);
-		accel_i2c_write_byte_data (ACCEL_I2C_PORT_REG2, 0);
-		accel_i2c_write_byte_data (ACCEL_I2C_PORT_REG1, accel_safe.registers.ctrl_1);
-
 		accel_info.suspended = 0;
 		mutex_unlock (&accel_info.mlock);
+                accel_i2c_set_config(oldmode,oldodr,oldgrange,-1);
 
 		dprintk ("driver resumed");
 	}
