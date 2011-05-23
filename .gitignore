@@ -70,3 +70,4 @@ ncscope.*
 # temp config file
 __ext_mapphone_defconfig
 
+arch/arm/boot/compressed/piggy.lzma
