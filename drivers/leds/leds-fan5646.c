@@ -34,7 +34,10 @@
 #include <linux/jiffies.h>
 #include <asm/gpio.h>
 #include <mach/vreg.h>
+#include <linux/fcntl.h>
+
 //#include "tinywire.h"
+#define CONFIG_LEDS_FAN5646_JAK_MOD 1
 
 #if defined(CONFIG_MACH_CALGARY) || defined(CONFIG_MACH_PITTSBURGH)
 #include <mach/board.h>
@@ -91,6 +94,12 @@ struct fan5646 {
     struct led_classdev leds[NUM_LEDS];
     unsigned is_reg[NUM_LEDS];
     struct device *dev;
+#ifdef CONFIG_LEDS_FAN5646_JAK_MOD    ///jak modded
+    unsigned long msON;
+    unsigned long msOFF;
+    unsigned long msON1;
+    unsigned long msOFF1;
+#endif
     __u8 default_current;
     unsigned tsleep;
     spinlock_t lock;
@@ -114,6 +123,14 @@ static struct fan5646 fan5646_data = {
             .blink_set       = fan5646_blink_set,
         },
     },
+
+#if CONFIG_LEDS_FAN5646_JAK_MOD   ///jak modded
+    .msON = 0,
+    .msOFF = 0,
+    .msON1 = 0,
+    .msOFF1 = 0,
+#endif
+
     .default_current = FAN5646_ISET_5mA,
     .tsleep = 7,
     .lock = SPIN_LOCK_UNLOCKED,
@@ -350,7 +367,24 @@ static void fan5646_set_pulse (unsigned msOn, unsigned msOff,
 static ssize_t fan5646_blink_show (struct device *dev,
                       struct device_attribute *attr, char *buf)
 {
+#ifdef CONFIG_LEDS_FAN5646_JAK_MOD
+    // Create variables
+    unsigned int msON = 0, msOFF = 0, msON1 = 0, msOFF1 = 0;
+    msON = fan5646_data.msON;
+    msOFF = fan5646_data.msOFF;
+    msON1 = fan5646_data.msON1;
+    msOFF1 = fan5646_data.msOFF1;
+
+    if(msON && msOFF)
+        sprintf (buf, "**LED Hack by jak**\nON1 = %dms, OFF1 = %dms\nON2 = %dms, OFF2 = %dms\n",
+                 msON, msOFF, msON1, msOFF1); //jak modded
+    else
+        sprintf (buf, "**LED Hack by jak**\nNo Custom Settings Found!!\nUsing Default\n");
+
+    return strlen(buf) + 1;
+#else
     return 0;
+#endif
 }
 
 static ssize_t fan5646_blink_store (struct device *dev,
@@ -369,6 +403,9 @@ static ssize_t fan5646_blink_store (struct device *dev,
     char *ptr;
     unsigned long flags;
 
+#ifdef CONFIG_LEDS_FAN5646_JAK_MOD    ///jak mod start
+    unsigned int msON = 0, msOFF = 0, msON1 = 0, msOFF1 = 0;
+#endif    ///jak mod end
     if (!buf || size == 0) {
         printk (KERN_ERR "%s: invalid command\n", __FUNCTION__);
         return -EINVAL;
@@ -391,7 +428,12 @@ static ssize_t fan5646_blink_store (struct device *dev,
     }
 
     /* Now see if ramp values are there */
+#ifndef CONFIG_LEDS_FAN5646_JAK_MOD    ///jak modded
     ptr = strstr (buf, "ramp");
+#else
+    ptr = strstr (buf, "ramp_jak"); ///disable ramp settings
+#endif
+
     if (ptr) {
         ptr = strpbrk (ptr, "0123456789");
         if (!ptr) {
@@ -426,6 +468,20 @@ static ssize_t fan5646_blink_store (struct device *dev,
 #if !defined(CONFIG_MACH_CALGARY) && !defined(CONFIG_MACH_PITTSBURGH)
     vreg_enable (fan5646_data.vr);
 #endif /* !defined(CONFIG_MACH_CALGARY) && !defined(CONFIG_MACH_PITTSBURGH) */
+#ifdef CONFIG_LEDS_FAN5646_JAK_MOD    ///jak mod start
+    msON = fan5646_data.msON;
+    msOFF = fan5646_data.msOFF;
+    msON1 = fan5646_data.msON1;
+    msOFF1 = fan5646_data.msOFF1;
+    ///check if settings are available
+    if(msON && msOFF)
+     {
+         msOn = msON;   ///replace
+         msOff = msOFF;
+         msOn1 = msON1;
+         msOff1 = msOFF1;
+     }
+#endif    ///jak mod end
     fan5646_set_pulse (msOn, msOff, ramp_up, ramp_down, &slew, &pulse);
     fan5646_set_pulse (msOn1, msOff1, ramp_up1, ramp_down1, &slew1, &pulse1);
     ctrl_value = fan5646_data.default_current | FAN5646_PLAY;
@@ -464,6 +520,10 @@ static ssize_t fan5646_settings_store (struct device *dev,
     unsigned value = 0;
     unsigned type = 0;
     char *ptr;
+#ifdef CONFIG_LEDS_FAN5646_JAK_MOD    ///jak mod start
+    unsigned int msON = 0, msOFF = 0, msON1 = 0, msOFF1 = 0;
+    int n = 0;
+#endif    ///jak mod end
 
     if (!buf || size == 0) {
         printk (KERN_ERR "%s: invalid command\n", __FUNCTION__);
@@ -474,6 +534,12 @@ static ssize_t fan5646_settings_store (struct device *dev,
         type = 1;
     } else if (strstr (buf, "timing")) {
         type = 2;
+
+#ifdef CONFIG_LEDS_FAN5646_JAK_MOD
+    } else if (strstr (buf, "jak_mod")) {
+        type = 3;
+#endif
+
     } else {
         printk (KERN_ERR "%s: inavlid command: %s\n", __FUNCTION__, buf);
         return -EINVAL;
@@ -510,6 +576,20 @@ static ssize_t fan5646_settings_store (struct device *dev,
                 __FUNCTION__, value);
             fan5646_data.tsleep = value;
             break;
+
+#if CONFIG_LEDS_FAN5646_JAK_MOD   ///jak mod
+    case 3:
+        n = sscanf(ptr, "%d %d %d %d", &msON, &msOFF, &msON1, &msOFF1);
+        if(n==2 || n==4)
+        {
+            fan5646_data.msON = msON;
+            fan5646_data.msOFF = msOFF;
+            fan5646_data.msON1 = msON1;
+            fan5646_data.msOFF1 = msOFF1;
+        }
+        break;
+#endif
+
         default:
             printk (KERN_ERR "%s: inavlid command: %s\n", __FUNCTION__, buf);
             return -EINVAL;
