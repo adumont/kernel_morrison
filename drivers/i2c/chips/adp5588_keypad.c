@@ -700,8 +700,8 @@ static int adp5588_probe(struct i2c_client *client, const struct i2c_device_id *
 	    __FILE__, __FUNCTION__);
     goto err_input_dev_alloc_failed;
   }
-  adp5588_data.input_dev->name = ADP5588_DEVNAME;
-  //adp5588_data.input_dev->name = pdev->name;
+  //adp5588_data.input_dev->name = ADP5588_DEVNAME;
+  adp5588_data.input_dev->name = pdev->name;
   adp5588_data.input_dev->id.bustype = BUS_I2C;
   adp5588_data.input_dev->id.vendor = adp5588_data.dev_id>>4;
   adp5588_data.input_dev->id.product = adp5588_data.dev_id|0xf;
